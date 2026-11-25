@@ -1,0 +1,265 @@
+{
+  "info": {
+    "name": "LMS Training Institute API Collection",
+    "_postman_id": "c1f7b8e2-89b1-4c4f-a9db-953e548d0a51",
+    "description": "Comprehensive Postman collection for all 111 endpoints of the Learning Management System (LMS) backend.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:8000", "type": "string" },
+    { "key": "token", "value": "", "type": "string" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{token}}", "type": "string" }
+    ]
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/health", "host": ["{{baseUrl}}"], "path": ["api", "health"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login (Admin)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@lms-institute.com\",\n  \"password\": \"Admin@123456\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
+          }
+        },
+        {
+          "name": "Register User (Admin Only)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Alice Student\",\n  \"email\": \"alice@example.com\",\n  \"password\": \"Student@123456\",\n  \"role\": \"student\",\n  \"student_code\": \"STU-2026-001\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/register", "host": ["{{baseUrl}}"], "path": ["api", "auth", "register"] }
+          }
+        },
+        {
+          "name": "Get Current User Profile (/me)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/auth/me", "host": ["{{baseUrl}}"], "path": ["api", "auth", "me"] }
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Admin User Updated\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/me", "host": ["{{baseUrl}}"], "path": ["api", "auth", "me"] }
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"Admin@123456\",\n  \"new_password\": \"NewAdmin@123456\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/change-password", "host": ["{{baseUrl}}"], "path": ["api", "auth", "change-password"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Courses & Modules",
+      "item": [
+        {
+          "name": "List Courses",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/courses?page=1&page_size=20", "host": ["{{baseUrl}}"], "path": ["api", "courses"], "query": [{ "key": "page", "value": "1" }, { "key": "page_size", "value": "20" }] }
+          }
+        },
+        {
+          "name": "Create Course",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"course_code\": \"DEV-101\",\n  \"name\": \"Full-Stack Software Engineering\",\n  \"description\": \"Comprehensive curriculum on modern web architecture.\",\n  \"category\": \"Software Engineering\",\n  \"duration_hours\": 120,\n  \"fee\": 15000.00,\n  \"status\": \"published\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/courses", "host": ["{{baseUrl}}"], "path": ["api", "courses"] }
+          }
+        },
+        {
+          "name": "Get Course Detail",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/courses/1", "host": ["{{baseUrl}}"], "path": ["api", "courses", "1"] }
+          }
+        },
+        {
+          "name": "Create Module",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Module 1: Backend Architecture\",\n  \"sequence_order\": 1\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/courses/1/modules", "host": ["{{baseUrl}}"], "path": ["api", "courses", "1", "modules"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Batches & Enrollments",
+      "item": [
+        {
+          "name": "List Batches",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/batches", "host": ["{{baseUrl}}"], "path": ["api", "batches"] }
+          }
+        },
+        {
+          "name": "Create Batch",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch_code\": \"BATCH-2026-A\",\n  \"name\": \"Morning Alpha Batch\",\n  \"course_id\": 1,\n  \"instructor_id\": 1,\n  \"start_date\": \"2027-01-15\",\n  \"end_date\": \"2027-04-15\",\n  \"class_days\": \"Mon,Wed,Fri\",\n  \"class_timing\": \"10:00 - 12:00\",\n  \"capacity\": 25\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/batches", "host": ["{{baseUrl}}"], "path": ["api", "batches"] }
+          }
+        },
+        {
+          "name": "List Enrollments",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/enrollments", "host": ["{{baseUrl}}"], "path": ["api", "enrollments"] }
+          }
+        },
+        {
+          "name": "Create Enrollment",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"student_id\": 2,\n  \"course_id\": 1\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/enrollments", "host": ["{{baseUrl}}"], "path": ["api", "enrollments"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Record Payment",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enrollment_id\": 1,\n  \"amount_paid\": 5000.00,\n  \"payment_method\": \"online\",\n  \"transaction_ref\": \"TXN-9876543210\",\n  \"notes\": \"Initial installment\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/payments", "host": ["{{baseUrl}}"], "path": ["api", "payments"] }
+          }
+        },
+        {
+          "name": "List Payments",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/payments", "host": ["{{baseUrl}}"], "path": ["api", "payments"] }
+          }
+        },
+        {
+          "name": "Download Receipt PDF",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/payments/1/receipt", "host": ["{{baseUrl}}"], "path": ["api", "payments", "1", "receipt"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Certificates",
+      "item": [
+        {
+          "name": "List Certificates",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/certificates", "host": ["{{baseUrl}}"], "path": ["api", "certificates"] }
+          }
+        },
+        {
+          "name": "Public Verification",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/certificates/verify/SAMPLE_CODE", "host": ["{{baseUrl}}"], "path": ["api", "certificates", "verify", "SAMPLE_CODE"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard & Reports",
+      "item": [
+        {
+          "name": "Get Dashboard",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/dashboard", "host": ["{{baseUrl}}"], "path": ["api", "dashboard"] }
+          }
+        },
+        {
+          "name": "Export Students Report (CSV)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/reports/students?format=csv", "host": ["{{baseUrl}}"], "path": ["api", "reports", "students"], "query": [{ "key": "format", "value": "csv" }] }
+          }
+        },
+        {
+          "name": "Export Enrollments Report (XLSX)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/reports/enrollments?format=xlsx", "host": ["{{baseUrl}}"], "path": ["api", "reports", "enrollments"], "query": [{ "key": "format", "value": "xlsx" }] }
+          }
+        },
+        {
+          "name": "Export Payments Report (PDF)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/reports/payments?format=pdf", "host": ["{{baseUrl}}"], "path": ["api", "reports", "payments"], "query": [{ "key": "format", "value": "pdf" }] }
+          }
+        }
+      ]
+    }
+  ]
+}
