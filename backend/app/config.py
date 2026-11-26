@@ -1,5 +1,6 @@
 from functools import lru_cache
 from typing import List
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +20,16 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "mysql+pymysql://root:@127.0.0.1:3306/lms_db?charset=utf8mb4"
     TEST_DATABASE_URL: str = "mysql+pymysql://root:@127.0.0.1:3306/lms_test_db?charset=utf8mb4"
+
+    @field_validator("DATABASE_URL", "TEST_DATABASE_URL", mode="before")
+    @classmethod
+    def normalize_database_url(cls, v: str) -> str:
+        if isinstance(v, str):
+            if v.startswith("mysql://"):
+                return v.replace("mysql://", "mysql+pymysql://", 1)
+            elif v.startswith("postgres://"):
+                return v.replace("postgres://", "postgresql://", 1)
+        return v
 
     JWT_SECRET_KEY: str = "dev-only-insecure-secret-change-in-production-32chars"
     JWT_ALGORITHM: str = "HS256"
