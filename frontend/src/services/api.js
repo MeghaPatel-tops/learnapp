@@ -1,8 +1,8 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000',
-  timeout: 30000,
+  baseURL: import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'https://learnapp-2vx3.onrender.com' : 'http://127.0.0.1:8000'),
+  timeout: 60000,
 });
 
 api.interceptors.request.use(

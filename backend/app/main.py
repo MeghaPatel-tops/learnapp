@@ -56,6 +56,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins_list,
+        allow_origin_regex=r"^https?:\/\/.*",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -93,6 +94,56 @@ def create_app() -> FastAPI:
     @app.get("/api/health", tags=["Health"])
     def health_check():
         return {"status": "ok", "app": settings.APP_NAME, "version": settings.APP_VERSION}
+
+    # ----- Startup database initialization -----
+    @app.on_event("startup")
+    def startup_db_init():
+        """Ensure database tables exist and initial essential data is seeded."""
+        try:
+            from sqlalchemy import select
+            from app.database import SessionLocal, engine
+            from app.models import Base
+            from app.models.user import Role, User
+            from app.utils.security import hash_password
+
+            # Create tables if not present
+            Base.metadata.create_all(bind=engine)
+
+            db = SessionLocal()
+            try:
+                role_defs = [
+                    ("admin", "System administrator with full access"),
+                    ("instructor", "Teaching staff managing courses and batches"),
+                    ("student", "Learner enrolled in courses"),
+                ]
+                created_roles = {}
+                for name, desc in role_defs:
+                    existing = db.execute(select(Role).where(Role.name == name)).scalar_one_or_none()
+                    if existing is None:
+                        role = Role(name=name, description=desc)
+                        db.add(role)
+                        db.flush()
+                        created_roles[name] = role
+                    else:
+                        created_roles[name] = existing
+
+                admin_email = "admin@lms-institute.com"
+                admin_exists = db.execute(select(User).where(User.email == admin_email)).scalar_one_or_none()
+                if admin_exists is None and "admin" in created_roles:
+                    admin_user = User(
+                        role_id=created_roles["admin"].id,
+                        full_name="System Administrator",
+                        email=admin_email,
+                        password_hash=hash_password("Admin@123456"),
+                        is_active=True,
+                    )
+                    db.add(admin_user)
+
+                db.commit()
+            finally:
+                db.close()
+        except Exception as e:
+            logging.getLogger("uvicorn.error").warning(f"Startup DB init notice: {e}")
 
     return app
 
