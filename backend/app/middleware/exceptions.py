@@ -31,6 +31,18 @@ def _error_payload(code: str, message: str, details: Optional[Any] = None) -> di
     return {"error": {"code": code, "message": message, "details": details}}
 
 
+def cors_headers_from_request(request: Request) -> dict:
+    origin = request.headers.get("origin")
+    if origin:
+        return {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT",
+            "Access-Control-Allow-Headers": "*",
+        }
+    return {}
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """Register consistent JSON exception handlers on the FastAPI application."""
 
@@ -39,6 +51,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=exc.status_code,
             content=_error_payload(exc.code, exc.message, exc.details),
+            headers=cors_headers_from_request(_request),
         )
 
     @app.exception_handler(HTTPException)
@@ -55,10 +68,13 @@ def register_exception_handlers(app: FastAPI) -> None:
         code = code_map.get(exc.status_code, "HTTP_ERROR")
         message = exc.detail if isinstance(exc.detail, str) else "Request failed."
         details = None if isinstance(exc.detail, str) else exc.detail
+        headers = cors_headers_from_request(_request)
+        if exc.headers:
+            headers.update(exc.headers)
         return JSONResponse(
             status_code=exc.status_code,
             content=_error_payload(code, message, details),
-            headers=exc.headers,
+            headers=headers,
         )
 
     @app.exception_handler(RequestValidationError)
@@ -77,6 +93,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content=_error_payload("VALIDATION_ERROR", "Request validation failed.", errors),
+            headers=cors_headers_from_request(_request),
         )
 
     @app.exception_handler(RateLimitExceeded)
@@ -87,6 +104,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "RATE_LIMIT_EXCEEDED",
                 "Too many requests. Please try again later.",
             ),
+            headers=cors_headers_from_request(_request),
         )
 
     @app.exception_handler(IntegrityError)
@@ -98,6 +116,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "CONFLICT",
                 "Operation conflicts with existing database constraints or records.",
             ),
+            headers=cors_headers_from_request(_request),
         )
 
     @app.exception_handler(Exception)
@@ -108,5 +127,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             content=_error_payload(
                 "INTERNAL_SERVER_ERROR",
                 "An unexpected internal error occurred.",
+                details=str(exc),
             ),
+            headers=cors_headers_from_request(_request),
         )

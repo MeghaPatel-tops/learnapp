@@ -95,6 +95,19 @@ def create_app() -> FastAPI:
     def health_check():
         return {"status": "ok", "app": settings.APP_NAME, "version": settings.APP_VERSION}
 
+    @app.get("/api/db-check", tags=["Health"])
+    def db_check():
+        """Diagnostic endpoint to inspect database connectivity status."""
+        try:
+            from sqlalchemy import text
+            from app.database import engine
+            with engine.connect() as conn:
+                res = conn.execute(text("SELECT 1")).scalar()
+            return {"status": "ok", "db": "connected", "result": res}
+        except Exception as e:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
     # ----- Startup database initialization -----
     @app.on_event("startup")
     def startup_db_init():
