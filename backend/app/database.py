@@ -20,6 +20,25 @@ def _create_db_engine(url: str):
     kwargs = {"pool_pre_ping": True}
     if url.startswith("mysql"):
         kwargs["pool_recycle"] = 3600
+        # PyMySQL does not accept 'ssl-mode' as a raw URL parameter.
+        # Parse it out and pass it properly via connect_args={'ssl': ...}
+        from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+        parsed = urlparse(url)
+        if parsed.query:
+            query_params = parse_qs(parsed.query)
+            ssl_mode = (
+                query_params.pop("ssl-mode", None)
+                or query_params.pop("sslmode", None)
+                or query_params.pop("ssl_mode", None)
+            )
+            if ssl_mode:
+                new_query = urlencode([(k, v[0]) for k, v in query_params.items()])
+                url = urlunparse(parsed._replace(query=new_query))
+                mode_str = ssl_mode[0].upper() if isinstance(ssl_mode, list) else str(ssl_mode).upper()
+                if mode_str in ("DISABLED", "DISABLE"):
+                    kwargs["connect_args"] = {"ssl_disabled": True}
+                else:
+                    kwargs["connect_args"] = {"ssl": {"ssl_mode": mode_str}}
     elif url.startswith("sqlite"):
         kwargs["connect_args"] = {"check_same_thread": False}
     return create_engine(url, **kwargs)
