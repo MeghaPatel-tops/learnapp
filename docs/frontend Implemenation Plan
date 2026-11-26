@@ -1,0 +1,141 @@
+# Frontend Architecture & Implementation Plan
+
+**Framework**: React 18 / 19 with Vite  
+**Styling**: Tailwind CSS (with custom utility classes & modern design tokens)  
+**State Management**: Redux Toolkit (`@reduxjs/toolkit` + `react-redux`)  
+**Routing**: React Router DOM (v6 / v7 compatible)  
+**HTTP Client**: Centralized Axios with request/response interceptors  
+**Icons & Feedback**: React Icons (`react-icons`), React Hot Toast (`react-hot-toast`)  
+**Target Backend**: FastAPI LMS on `http://127.0.0.1:8000`  
+
+---
+
+## 1. Directory Structure
+
+```text
+frontend/
+├── index.html
+├── package.json
+├── postcss.config.js
+├── tailwind.config.js
+├── vite.config.js
+└── src/
+    ├── assets/              # Logos, brand badges, illustrations, placeholder avatars
+    ├── components/
+    │   ├── common/          # Button, Input, Select, Badge, Card, Modal, Tooltip, Dropdown
+    │   ├── feedback/        # SkeletonLoader, LoadingSpinner, EmptyState, ErrorAlert
+    │   ├── layout/          # Navbar, Sidebar, Footer, PageHeader, Breadcrumbs
+    │   ├── tables/          # DataTable, Pagination, TableFilter, TableSort
+    │   └── forms/           # FormField, Textarea, FileUpload, DatePickerInput
+    ├── features/            # Feature-specific state, components & hooks
+    │   ├── auth/            # LoginForm, ForgotPassword, ResetPassword, ProfileModal
+    │   ├── dashboard/       # AdminDashboard, InstructorDashboard, StudentDashboard, MetricCard
+    │   ├── users/           # UserList, UserModal, ResetPasswordModal
+    │   ├── students/        # StudentList, StudentDetail, StudentForm
+    │   ├── instructors/     # InstructorList, InstructorDetail, InstructorForm
+    │   ├── courses/         # CourseList, CourseDetail, CourseForm, ModuleAccordion
+    │   ├── batches/         # BatchList, BatchDetail, BatchForm, RosterModal
+    │   ├── enrollments/     # EnrollmentList, EnrollmentModal
+    │   ├── lectures/        # LectureList, VideoPlayerModal, LectureUploadModal
+    │   ├── materials/       # MaterialList, MaterialUploadModal
+    │   ├── assignments/     # AssignmentList, AssignmentForm, SubmissionModal, EvaluationModal
+    │   ├── quizzes/         # QuizList, QuizForm, QuestionBuilder, QuizRunner, QuizResult
+    │   ├── attendance/      # AttendanceGrid, AttendanceSummaryCard, AuditLogModal
+    │   ├── progress/        # CourseProgressTracker, CompletionStatusBadge
+    │   ├── certificates/    # CertificateList, CertificateViewer, PublicVerifyView
+    │   ├── payments/        # PaymentList, RecordPaymentModal, ReceiptViewer
+    │   ├── announcements/   # AnnouncementFeed, AnnouncementModal
+    │   └── reports/         # ReportExportModal, ExportButton
+    ├── layouts/
+    │   ├── AppLayout.jsx    # Authenticated shell (Sidebar + Navbar + Content + Footer)
+    │   └── AuthLayout.jsx   # Clean split layout for Login, Forgot Password, Certificate Verification
+    ├── pages/               # Route entry points mapping 1-to-1 with view screens
+    ├── routes/
+    │   ├── AppRoutes.jsx    # Complete React Router setup
+    │   ├── ProtectedRoute.jsx # Role-based gatekeeper & auth validator
+    │   └── PublicRoute.jsx  # Redirects authenticated users to dashboard
+    ├── services/
+    │   ├── api.js           # Axios base instance with token interceptors & error normalizing
+    │   ├── authService.js
+    │   ├── userService.js
+    │   ├── courseService.js
+    │   ├── batchService.js
+    │   ├── lectureService.js
+    │   ├── assessmentService.js
+    │   ├── attendanceService.js
+    │   ├── paymentService.js
+    │   ├── certificateService.js
+    │   └── reportService.js
+    ├── store/
+    │   ├── index.js         # Redux configureStore
+    │   ├── authSlice.js     # User, token, role, permissions, login/logout actions
+    │   ├── uiSlice.js       # Sidebar collapse, global modal registry, theme preferences
+    │   └── notificationSlice.js # Unread badge, notification queue
+    ├── utils/
+    │   ├── constants.js     # API endpoints, roles, status colors, badge styling
+    │   ├── formatters.js    # Currency formatting, datetime formatting, file size formatting
+    │   └── validators.js    # Form input validation rules
+    └── App.jsx
+```
+
+---
+
+## 2. Authentication & Authorization Implementation
+
+- **Token Storage**: `localStorage.getItem("token")` and `user` profile object synchronized with Redux store on initialization.
+- **Axios Interceptor**:
+  - Request: Injects `Authorization: Bearer <token>` automatically when token exists.
+  - Response: Catches `401 Unauthorized` or `403 Forbidden` (`ACCOUNT_INACTIVE`), clears session, dispatches logout action, and navigates to `/login` with an informational toast.
+- **Route Protection**:
+  - `ProtectedRoute`: Verifies `isAuthenticated`. Checks `allowedRoles` array against `currentUser.role`. If unauthorized, redirects to appropriate fallback or displays a clean `403 Forbidden Access` screen.
+  - Public routes: `/login`, `/forgot-password`, `/reset-password`, and `/verify-certificate/:code` (which requires **no** login as per backend spec).
+
+---
+
+## 3. UI/UX Design System & Color Palette
+
+- **Theme**: Modern Enterprise Slate & Indigo
+  - Primary: Deep Indigo / Violet (`#4F46E5`, `#4338CA`, `#3730A3`)
+  - Accent / Status: Emerald green for active/passed/paid (`#10B981`), Amber for pending/draft/review (`#F59E0B`), Rose red for failed/dropped/absent (`#EF4444`), Sky blue for upcoming/info (`#0284C7`)
+  - Backgrounds: Clean neutral canvas (`#F8FAFC` slate-50, `#FFFFFF` pure white cards with subtle borders `#E2E8F0`)
+- **Typography**: Inter / System UI, high-contrast crisp readability, hierarchy from H1 to micro-labels.
+- **Responsive Navigation**: Collapsible desktop sidebar with icon tooltips; drawer menu on tablet/mobile screens.
+- **Micro-Interactions**: Hover lifts on metric cards, subtle button active states, smooth dropdown transitions, skeleton loaders for data fetching.
+
+---
+
+## 4. Phased Implementation Roadmap
+
+- **Phase 1: Backend Analysis & API Inventory** *(Completed)*
+- **Phase 2: Implementation Plan & Architecture Alignment** *(Current step)*
+- **Phase 3: Project Scaffolding & Setup**
+  - Initialize Vite React project in `frontend/`.
+  - Configure Tailwind CSS, PostCSS, Vite proxy, and dependencies (`react-router-dom`, `@reduxjs/toolkit`, `react-redux`, `axios`, `react-icons`, `react-hot-toast`).
+- **Phase 4: Design System & Core Reusable Components**
+  - Typography, standard buttons (primary, secondary, danger, ghost), form inputs, modal dialog, confirmation alert, badge, skeleton loader, and responsive data table with pagination and sorting.
+- **Phase 5: Auth Shell & Routing Infrastructure**
+  - Centralized Axios client (`api.js`) with request/response interceptors.
+  - Redux `authSlice` with token re-hydration.
+  - `AuthLayout`, `AppLayout`, `Navbar` (user menu, notification popover), `Sidebar` (role-scoped navigation items), `Footer`.
+  - Public `/login`, `/forgot-password`, `/reset-password` pages.
+- **Phase 6: Role Dashboards & Health Monitoring**
+  - Dynamic Dashboard supporting Admin metrics (revenue, enrollments), Instructor metrics (submissions to grade, upcoming batches), and Student metrics (enrolled courses, attendance, upcoming deadlines).
+- **Phase 7: Core Academic Modules**
+  - Courses & Curriculum management (course list, add/edit course, modules builder, co-instructor assignment).
+  - Batches & Rosters management (batch scheduling, capacity tracker, student roster addition & removal).
+  - Enrollments (student enrollment workflow, status tracking).
+- **Phase 8: Content & Assessment Modules**
+  - Lectures & Video streaming / file uploads (lecture reordering, video upload, complete lecture button).
+  - Study materials repository (file upload with MIME checking, direct download stream).
+  - Assignments & Submissions (create assignment, student submission with file attachment, instructor grading rubric).
+  - Quizzes & MCQs (quiz creation, question & MCQ options builder, student timed quiz runner, auto-grading results).
+- **Phase 9: Operational Modules & Reports**
+  - Attendance (bulk session attendance grid, audit logs modal with mandatory reason).
+  - Fee Payments & Invoices (record payment installment, overpayment guard, PDF receipt download).
+  - Certificates (auto-check course completion criteria, generate PDF, and public verification page `/verify-certificate/:code`).
+  - Announcements & Notifications (broadcast announcement, unread badge, mark read).
+  - Reports export (CSV, Excel, PDF table downloads).
+- **Phase 10: Verification, Polishing & Production Build**
+  - Verification of every flow with the live backend API.
+  - Responsive layout checks across mobile, tablet, and desktop viewports.
+  - Production build execution (`npm run build`) to ensure zero bundle/lint errors.

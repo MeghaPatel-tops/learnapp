@@ -1,0 +1,244 @@
+# Backend Analysis & Complete API Inventory
+
+**Target Application**: Enterprise Learning Management System (LMS)  
+**Backend Framework**: FastAPI (Python 3.12) with SQLAlchemy 2.0, Alembic, MySQL 8.4 InnoDB  
+**Authentication Standard**: HTTP Bearer (JWT HS256, 60m expiry), Argon2id password hashing  
+**Base URL**: `http://127.0.0.1:8000` (CORS configured for `http://localhost:5173` and `http://127.0.0.1:5173`)  
+
+---
+
+## 1. Backend Architecture & Domain Models
+
+### 1.1 Database Models & Entity-Relationship Overview
+The database comprises **28 relational tables** mapped with strict foreign key constraints:
+1. **User & Identity (`app/models/user.py`)**:
+   - `roles`: `id`, `name` (`admin` | `instructor` | `student`), `description`
+   - `users`: `id`, `role_id`, `full_name`, `email`, `password_hash`, `phone`, `avatar_url`, `is_active`, `last_login_at`, timestamps
+   - `password_reset_tokens`: `id`, `user_id`, `token_hash`, `expires_at`, `used_at`
+   - `instructors`: `id`, `user_id` (1:1), `employee_code` (`INS-YYYY-XXXX`), `expertise`, `qualification`, `bio`, `experience_years`
+   - `students`: `id`, `user_id` (1:1), `student_code` (`STU-YYYY-XXXX`), `date_of_birth`, `address`, `guardian_name`, `guardian_phone`
+2. **Curriculum & Courses (`app/models/course.py`)**:
+   - `courses`: `id`, `course_code`, `name`, `description`, `category`, `duration_hours`, `fee`, `thumbnail_url`, `status` (`draft` | `published` | `archived`), `primary_instructor_id`
+   - `course_instructors`: `course_id`, `instructor_id` (co-instructors)
+   - `course_modules`: `id`, `course_id`, `title`, `description`, `sequence_order`
+3. **Batches & Rosters (`app/models/operations.py`)**:
+   - `batches`: `id`, `batch_code`, `name`, `course_id`, `instructor_id`, `start_date`, `end_date`, `class_days`, `class_timing`, `capacity`, `status` (`upcoming` | `active` | `closed` | `archived`)
+   - `batch_students`: `batch_id`, `student_id`, `status` (`active` | `dropped` | `completed`), `joined_at`
+   - `enrollments`: `id`, `student_id`, `course_id`, `status` (`active` | `completed` | `dropped`), `enrolled_at`, `completed_at`
+4. **Content & Delivery (`app/models/content.py`)**:
+   - `lectures`: `id`, `course_id`, `module_id`, `title`, `description`, `sequence_order`, `video_url`, `video_file_name`, `video_file_size`, `duration_minutes`, `is_published`
+   - `study_materials`: `id`, `course_id`, `module_id`, `lecture_id`, `title`, `description`, `file_name`, `file_path`, `mime_type`, `file_size`, `uploaded_by`
+   - `lecture_progress`: `id`, `student_id`, `lecture_id`, `is_completed`, `completed_at`
+5. **Assessments (`app/models/assessment.py`)**:
+   - `assignments`: `id`, `course_id`, `batch_id`, `title`, `instructions`, `attachment_name`, `attachment_path`, `max_marks`, `passing_marks`, `due_date`, `allow_late`, `created_by`
+   - `submissions`: `id`, `assignment_id`, `student_id`, `version`, `submission_text`, `file_name`, `file_path`, `status` (`submitted` | `under_review` | `evaluated`), `is_late`, `submitted_at`
+   - `assignment_feedback`: `id`, `submission_id`, `evaluator_id`, `marks_obtained`, `feedback_text`, `evaluated_at`
+   - `quizzes`: `id`, `course_id`, `batch_id`, `title`, `description`, `total_marks`, `passing_marks`, `duration_minutes`, `available_from`, `available_until`, `allow_retakes`, `max_attempts`, `show_correct_answers`, `is_published`
+   - `questions`: `id`, `quiz_id`, `question_text`, `marks`, `sequence_order`
+   - `quiz_options`: `id`, `question_id`, `option_text`, `is_correct`, `sequence_order`
+   - `quiz_attempts`: `id`, `quiz_id`, `student_id`, `attempt_number`, `started_at`, `expires_at`, `submitted_at`, `status`, `score`, `is_passed`
+   - `quiz_answers`: `id`, `attempt_id`, `question_id`, `selected_option_id`, `is_correct`, `marks_awarded`
+6. **Operations, Finance & Certification (`app/models/operations.py`)**:
+   - `attendance`: `id`, `batch_id`, `student_id`, `session_date`, `status` (`present` | `absent` | `cancelled` | `holiday` | `approved_leave`), `remarks`, `marked_by`, `updated_by`
+   - `attendance_audit_logs`: `id`, `attendance_id`, `old_status`, `new_status`, `changed_by`, `reason`, `changed_at`
+   - `certificates`: `id`, `student_id`, `course_id`, `certificate_number`, `verification_code`, `issue_date`, `pdf_path`
+   - `payments`: `id`, `receipt_number`, `student_id`, `course_id`, `enrollment_id`, `amount_paid`, `payment_method` (`cash` | `card` | `bank_transfer` | `upi` | `online`), `transaction_ref`, `status` (`paid` | `partially_paid` | `pending` | `refunded`), `payment_date`, `notes`, `recorded_by`
+   - `notifications`: `id`, `user_id`, `title`, `message`, `event_type`, `reference_type`, `reference_id`, `is_read`, `read_at`
+   - `announcements`: `id`, `title`, `content`, `target_role` (`all` | `admin` | `instructor` | `student`), `course_id`, `batch_id`, `created_by`, `published_at`
+
+---
+
+## 2. Standard Request & Response Envelopes
+
+### 2.1 Pagination Format (`PaginatedResponse[T]`)
+```json
+{
+  "items": [ ... ],
+  "total": 45,
+  "page": 1,
+  "page_size": 20,
+  "total_pages": 3
+}
+```
+Standard query parameters: `page` (int $\ge 1$, default 1), `page_size` (int $1 \dots 100$, default 20), `sort_by` (string, default `"created_at"`), `sort_order` (`"asc"` | `"desc"`, default `"desc"`).
+
+### 2.2 Error Envelope (`ErrorResponse`)
+```json
+{
+  "error": {
+    "code": "INVALID_CREDENTIALS",
+    "message": "Invalid email or password.",
+    "details": null
+  }
+}
+```
+Standard HTTP status codes: `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `409 Conflict`, `422 Unprocessable Entity`, `429 Too Many Requests`.
+
+---
+
+## 3. Complete API Inventory by Functional Module
+
+### Module 1: Authentication & Account Management (`/api/auth`)
+| Method | Endpoint | Allowed Roles | Request Payload / Params | Response | Description |
+|---|---|---|---|---|---|
+| `POST` | `/api/auth/login` | Public | `{ email, password }` | `{ access_token, token_type, expires_in, user }` | Authenticates user; rate limit 10/min |
+| `POST` | `/api/auth/register` | `admin` | User creation schema | `UserSummary` (201) | Admin registers new student/instructor/admin |
+| `GET` | `/api/auth/me` | Authenticated | None | `UserSummary` | Returns current active user profile |
+| `PUT` | `/api/auth/me` | Authenticated | `{ full_name?, phone?, avatar_url? }` | `UserSummary` | Updates profile metadata |
+| `POST` | `/api/auth/change-password` | Authenticated | `{ current_password, new_password }` | `MessageResponse` | Changes user password |
+| `POST` | `/api/auth/forgot-password` | Public | `{ email }` | `MessageResponse` | Triggers reset token generation; 5/min |
+| `POST` | `/api/auth/reset-password` | Public | `{ token, new_password }` | `MessageResponse` | Resets password using token; 5/min |
+
+### Module 2: User Management (`/api/users`)
+| Method | Endpoint | Allowed Roles | Request Payload / Params | Response | Description |
+|---|---|---|---|---|---|
+| `GET` | `/api/users` | `admin` | Query: `page, page_size, search, role, is_active, sort_by, sort_order` | `PaginatedResponse[UserSummary]` | Filterable & searchable user list |
+| `POST` | `/api/users` | `admin` | `UserCreateRequest` | `UserSummary` (201) | Create new user account |
+| `GET` | `/api/users/{user_id}` | `admin` | Path: `user_id` | `UserSummary` | Get user by ID |
+| `PUT` | `/api/users/{user_id}` | `admin` | `UserUpdateRequest` | `UserSummary` | Update user details, role, status |
+| `DELETE` | `/api/users/{user_id}` | `admin` | Path: `user_id` | `MessageResponse` | Soft deactivates user (blocks self-deactivation) |
+| `POST` | `/api/users/{user_id}/reset-password` | `admin` | `{ new_password }` | `MessageResponse` | Admin forces password override |
+
+### Module 3: Student & Instructor Profiles (`/api/students`, `/api/instructors`)
+| Method | Endpoint | Allowed Roles | Request Payload / Params | Response | Description |
+|---|---|---|---|---|---|
+| `GET` | `/api/students` | `admin`, `instructor` | Query: `page, page_size, search, is_active, sort_by, sort_order` | `PaginatedResponse[StudentOut]` | List student profiles |
+| `POST` | `/api/students` | `admin` | `StudentCreateRequest` | `StudentOut` (201) | Create student with profile & auto code |
+| `GET` | `/api/students/{id}` | `admin`, `instructor`, `student` (own) | Path: `student_id` | `StudentDetailOut` | Detailed profile with enrollments & attendance |
+| `PUT` | `/api/students/{id}` | `admin` | `StudentUpdateRequest` | `StudentOut` | Update student profile |
+| `GET` | `/api/instructors` | Authenticated | Query: `page, page_size, search, is_active, sort_by, sort_order` | `PaginatedResponse[InstructorOut]` | List instructor profiles |
+| `POST` | `/api/instructors` | `admin` | `InstructorCreateRequest` | `InstructorOut` (201) | Create instructor account & profile |
+| `GET` | `/api/instructors/{id}` | Authenticated | Path: `instructor_id` | `InstructorDetailOut` | Instructor details with assigned courses/batches |
+| `PUT` | `/api/instructors/{id}` | `admin`, `instructor` (own) | `InstructorUpdateRequest` | `InstructorOut` | Update instructor qualifications/bio |
+
+### Module 4: Courses & Curriculum Modules (`/api/courses`)
+| Method | Endpoint | Allowed Roles | Request Payload / Params | Response | Description |
+|---|---|---|---|---|---|
+| `GET` | `/api/courses` | Authenticated (scoped) | Query: `page, page_size, search, category, status, sort_by, sort_order` | `PaginatedResponse[CourseOut]` | List courses (Admin: all, Inst: assigned, Stu: published/enrolled) |
+| `POST` | `/api/courses` | `admin` | `CourseCreateRequest` | `CourseOut` (201) | Create course |
+| `GET` | `/api/courses/{id}` | Authenticated | Path: `course_id` | `CourseDetailOut` | Full course view with modules & instructors |
+| `PUT` | `/api/courses/{id}` | `admin`, assigned `instructor` | `CourseUpdateRequest` | `CourseOut` | Update course details |
+| `POST` | `/api/courses/{id}/publish` | `admin` | Path: `course_id` | `CourseOut` | Publish course |
+| `POST` | `/api/courses/{id}/unpublish`| `admin` | Path: `course_id` | `CourseOut` | Revert to draft |
+| `POST` | `/api/courses/{id}/archive` | `admin` | Path: `course_id` | `CourseOut` | Archive course |
+| `DELETE` | `/api/courses/{id}` | `admin` | Path: `course_id` | `MessageResponse` | Delete course (if no active enrollments/batches) |
+| `POST` | `/api/courses/{id}/instructors` | `admin` | `{ instructor_id }` | `CourseInstructorBrief` | Assign co-instructor |
+| `DELETE` | `/api/courses/{id}/instructors/{inst_id}` | `admin` | Path: `course_id, inst_id` | `MessageResponse` | Remove co-instructor |
+| `GET` | `/api/courses/{id}/modules` | Authenticated | Path: `course_id` | `List[CourseModuleOut]` | List modules ordered by sequence |
+| `POST` | `/api/courses/{id}/modules` | `admin`, `instructor` | `CourseModuleCreateRequest` | `CourseModuleOut` (201) | Create course module |
+| `PUT` | `/api/courses/{id}/modules/{mod_id}` | `admin`, `instructor` | `CourseModuleUpdateRequest` | `CourseModuleOut` | Update module title/sequence |
+| `DELETE` | `/api/courses/{id}/modules/{mod_id}` | `admin`, `instructor` | Path: `course_id, mod_id` | `MessageResponse` | Delete module & attached content |
+
+### Module 5: Batches & Enrollments (`/api/batches`, `/api/enrollments`)
+| Method | Endpoint | Allowed Roles | Request Payload / Params | Response | Description |
+|---|---|---|---|---|---|
+| `GET` | `/api/batches` | Authenticated | Query: `course_id, instructor_id, status, search, page, page_size, sort_by, sort_order` | `PaginatedResponse[BatchOut]` | List batches |
+| `POST` | `/api/batches` | `admin` | `BatchCreateRequest` | `BatchOut` (201) | Create batch |
+| `GET` | `/api/batches/{id}` | Authenticated | Path: `batch_id` | `BatchDetailOut` | Batch details + student roster |
+| `PUT` | `/api/batches/{id}` | `admin` | `BatchUpdateRequest` | `BatchOut` | Update schedule, capacity, instructor |
+| `POST` | `/api/batches/{id}/close` | `admin` | Path: `batch_id` | `BatchOut` | Close batch to admissions |
+| `POST` | `/api/batches/{id}/archive`| `admin` | Path: `batch_id` | `BatchOut` | Archive batch |
+| `POST` | `/api/batches/{id}/students` | `admin` | `{ student_id }` | `BatchRosterItem` (201) | Add student to batch (checks enrollment & capacity) |
+| `DELETE` | `/api/batches/{id}/students/{stu_id}` | `admin` | Path: `batch_id, stu_id` | `MessageResponse` | Remove student from batch roster |
+| `GET` | `/api/enrollments` | `admin`, `instructor`, `student` (own) | Query: `student_id, course_id, status, page, page_size` | `PaginatedResponse[EnrollmentOut]` | List course enrollments |
+| `POST` | `/api/enrollments` | `admin` | `{ student_id, course_id }` | `EnrollmentOut` (201) | Enroll student in course |
+| `PUT` | `/api/enrollments/{id}` | `admin` | `{ status: "active" \| "completed" \| "dropped" }` | `EnrollmentOut` | Update enrollment status |
+
+### Module 6: Lectures & Study Materials (`/api/lectures`, `/api/materials`)
+| Method | Endpoint | Allowed Roles | Request Payload / Params | Response | Description |
+|---|---|---|---|---|---|
+| `GET` | `/api/lectures` | Authenticated | Query: `course_id` (req), `module_id`, `page, page_size` | `PaginatedResponse[LectureOut]` | List course lectures |
+| `POST` | `/api/lectures` | `admin`, `instructor` | `LectureCreateRequest` | `LectureOut` (201) | Create lecture item |
+| `PUT` | `/api/lectures/reorder` | `admin`, `instructor` | `{ course_id, module_id, lecture_ids }` | `List[LectureOut]` | Reorder sequence of lectures |
+| `GET` | `/api/lectures/{id}` | Authenticated | Path: `lecture_id` | `LectureOut` | Get lecture detail + completion status |
+| `PUT` | `/api/lectures/{id}` | `admin`, `instructor` | `LectureUpdateRequest` | `LectureOut` | Update lecture details |
+| `DELETE` | `/api/lectures/{id}` | `admin`, `instructor` | Path: `lecture_id` | `MessageResponse` | Delete lecture & uploaded video |
+| `POST` | `/api/lectures/{id}/upload-video` | `admin`, `instructor` | `multipart/form-data: file` | `LectureOut` | Upload video (.mp4, .webm, .mov) |
+| `GET` | `/api/lectures/{id}/video` | Authenticated | Path: `lecture_id` | Binary video stream | Stream lecture video |
+| `POST` | `/api/lectures/{id}/complete` | `student` | Path: `lecture_id` | `LectureCompletionOut` | Mark lecture as watched/complete |
+| `GET` | `/api/materials` | Authenticated | Query: `course_id` (req), `module_id, lecture_id, page, page_size` | `PaginatedResponse[StudyMaterialOut]` | List study materials |
+| `POST` | `/api/materials` | `admin`, `instructor` | `multipart/form-data: course_id, title, description, module_id?, lecture_id?, file` | `StudyMaterialOut` (201) | Upload material document (PDF/PPT/DOC) |
+| `GET` | `/api/materials/{id}/download` | Authenticated | Path: `material_id` | Binary file stream | Download material |
+| `DELETE` | `/api/materials/{id}` | `admin`, `instructor` | Path: `material_id` | `MessageResponse` | Delete material document |
+
+### Module 7: Assessments & Submissions (`/api/assignments`, `/api/submissions`)
+| Method | Endpoint | Allowed Roles | Request Payload / Params | Response | Description |
+|---|---|---|---|---|---|
+| `GET` | `/api/assignments` | Authenticated | Query: `course_id?, batch_id?, page, page_size` | `PaginatedResponse[AssignmentOut]` | List assignments |
+| `POST` | `/api/assignments` | `admin`, `instructor` | `AssignmentCreateRequest` | `AssignmentOut` (201) | Create assignment |
+| `GET` | `/api/assignments/{id}` | Authenticated | Path: `assignment_id` | `AssignmentOut` | View assignment instructions & details |
+| `PUT` | `/api/assignments/{id}` | `admin`, `instructor` | `AssignmentUpdateRequest` | `AssignmentOut` | Update assignment instructions/dates |
+| `DELETE` | `/api/assignments/{id}` | `admin`, `instructor` | Path: `assignment_id` | `MessageResponse` | Delete assignment |
+| `GET` | `/api/submissions` | Authenticated (scoped) | Query: `assignment_id?, status?, page, page_size` | `PaginatedResponse[SubmissionOut]` | List submissions (Stu: own; Inst/Admin: all) |
+| `POST` | `/api/submissions` | `student` | `multipart/form-data: assignment_id, submission_text?, file?` | `SubmissionOut` (201) | Submit assignment solution (versioned) |
+| `GET` | `/api/submissions/{id}` | Authenticated | Path: `submission_id` | `SubmissionOut` | Submission details + feedback |
+| `GET` | `/api/submissions/{id}/download` | Authenticated | Path: `submission_id` | Binary file stream | Download submission attachment |
+| `PATCH` | `/api/submissions/{id}/review` | `admin`, `instructor` | Path: `submission_id` | `SubmissionOut` | Mark submission `under_review` |
+| `POST` | `/api/submissions/{id}/evaluate` | `admin`, `instructor` | `{ marks_obtained, feedback_text? }` | `SubmissionOut` | Grade submission |
+
+### Module 8: Quizzes & MCQs (`/api/quizzes`)
+| Method | Endpoint | Allowed Roles | Request Payload / Params | Response | Description |
+|---|---|---|---|---|---|
+| `GET` | `/api/quizzes` | Authenticated | Query: `course_id?, batch_id?, page, page_size` | `PaginatedResponse[QuizOut]` | List quizzes |
+| `POST` | `/api/quizzes` | `admin`, `instructor` | `QuizCreateRequest` | `QuizOut` (201) | Create quiz with settings & optional questions |
+| `GET` | `/api/quizzes/{id}` | Authenticated | Path: `quiz_id` | `QuizDetailOut` | Quiz details (answers hidden for students) |
+| `PUT` | `/api/quizzes/{id}` | `admin`, `instructor` | `QuizUpdateRequest` | `QuizOut` | Update quiz settings |
+| `POST` | `/api/quizzes/{id}/publish` | `admin`, `instructor` | Path: `quiz_id` | `QuizOut` | Publish quiz |
+| `POST` | `/api/quizzes/{id}/questions` | `admin`, `instructor` | `QuestionCreate` (`question_text, marks, sequence_order, options: [{ option_text, is_correct, sequence_order }]`) | `QuestionOut` (201) | Add question & options |
+| `POST` | `/api/quizzes/{id}/start` | `student` | Path: `quiz_id` | `QuizAttemptOut` | Start quiz attempt (starts timer) |
+| `POST` | `/api/quizzes/{id}/attempts/{att_id}/save-answer` | `student` | `{ question_id, selected_option_id }` | `QuizAttemptOut` | Save choice dynamically |
+| `POST` | `/api/quizzes/{id}/attempts/{att_id}/submit` | `student` | Path: `quiz_id, att_id` | `QuizAttemptOut` | Submit & auto-grade quiz |
+| `GET` | `/api/quizzes/{id}/attempts` | Authenticated | Path: `quiz_id` | `List[QuizAttemptOut]` | View attempts history (Student: own; Inst/Admin: all) |
+
+### Module 9: Attendance Management (`/api/attendance`)
+| Method | Endpoint | Allowed Roles | Request Payload / Params | Response | Description |
+|---|---|---|---|---|---|
+| `POST` | `/api/attendance/bulk` | `admin`, `instructor` | `{ batch_id, session_date, records: [{ student_id, status, remarks? }] }` | `List[AttendanceOut]` | Mark batch session attendance in bulk |
+| `GET` | `/api/attendance` | Authenticated | Query: `batch_id?, student_id?, session_date?, page, page_size` | `PaginatedResponse[AttendanceOut]` | Filterable attendance logs |
+| `PUT` | `/api/attendance/{id}` | `admin`, `instructor` | `{ status, remarks?, reason }` | `AttendanceOut` | Update entry with mandatory audit reason |
+| `GET` | `/api/attendance/{id}/audit-logs` | `admin`, `instructor` | Path: `attendance_id` | `List[AttendanceAuditOut]` | View change audit history |
+| `GET` | `/api/attendance/summary` | Authenticated | Query: `student_id?, batch_id?` | `AttendanceSummaryOut` | Percentage calculation + monthly breakdown |
+
+### Module 10: Progress & Course Completion (`/api/progress`)
+| Method | Endpoint | Allowed Roles | Request Payload / Params | Response | Description |
+|---|---|---|---|---|---|
+| `GET` | `/api/progress/courses/{c_id}/students/{s_id}` | Authenticated | Path: `course_id, student_id` | `CourseProgressOut` | Overall progress %, lectures, assignments, quizzes, auto-completion check |
+
+### Module 11: Certificates & Public Verification (`/api/certificates`)
+| Method | Endpoint | Allowed Roles | Request Payload / Params | Response | Description |
+|---|---|---|---|---|---|
+| `GET` | `/api/certificates/verify/{code}` | **Public** | Path: `code` (verification code or certificate number) | `CertificateVerifyOut` | Authenticate certificate validity without login |
+| `GET` | `/api/certificates` | `admin`, `student` | Query: `course_id?, page, page_size` | `PaginatedResponse[CertificateOut]` | List issued certificates |
+| `POST` | `/api/certificates/generate` | `admin`, `student` | `{ student_id, course_id }` | `CertificateOut` (201) | Generate high-res PDF certificate (validates completion) |
+| `GET` | `/api/certificates/{id}/download`| `admin`, `student` | Path: `certificate_id` | PDF file stream | Download printable landscape certificate PDF |
+
+### Module 12: Fee Payments & Billing (`/api/payments`)
+| Method | Endpoint | Allowed Roles | Request Payload / Params | Response | Description |
+|---|---|---|---|---|---|
+| `POST` | `/api/payments` | `admin` | `{ enrollment_id, amount_paid, payment_method, transaction_ref?, notes? }` | `PaymentOut` (201) | Record payment installment (prevents overpayment) |
+| `GET` | `/api/payments` | `admin`, `student` (own) | Query: `student_id?, course_id?, status?, page, page_size` | `PaginatedResponse[PaymentOut]` | List payments with calculated balances |
+| `GET` | `/api/payments/{id}` | `admin`, `student` (own) | Path: `payment_id` | `PaymentOut` | Payment details |
+| `PUT` | `/api/payments/{id}` | `admin` | `{ status, notes? }` | `PaymentOut` | Update payment status (e.g. refunded) |
+| `GET` | `/api/payments/{id}/receipt` | `admin`, `student` (own) | Path: `payment_id` | PDF file stream | Download branded PDF receipt |
+
+### Module 13: Notifications & Announcements (`/api/notifications`, `/api/announcements`)
+| Method | Endpoint | Allowed Roles | Request Payload / Params | Response | Description |
+|---|---|---|---|---|---|
+| `GET` | `/api/notifications` | Authenticated | Query: `is_read?, page, page_size` | `PaginatedResponse[NotificationOut]` | User inbox |
+| `GET` | `/api/notifications/unread-count` | Authenticated | None | `{"unread_count": int}` | Unread counter for badges |
+| `PATCH` | `/api/notifications/{id}/read` | Authenticated | Path: `notification_id` | `NotificationOut` | Mark single notification as read |
+| `POST` | `/api/notifications/read-all` | Authenticated | None | `MessageResponse` | Mark all notifications read |
+| `GET` | `/api/announcements` | Authenticated | Query: `course_id?, batch_id?, page, page_size` | `PaginatedResponse[AnnouncementOut]` | Role/batch/course scoped announcements |
+| `POST` | `/api/announcements` | `admin`, `instructor` | `AnnouncementCreateRequest` | `AnnouncementOut` (201) | Broadcast announcement |
+| `DELETE` | `/api/announcements/{id}` | `admin`, `instructor` | Path: `announcement_id` | `MessageResponse` | Delete announcement |
+
+### Module 14: Dynamic Dashboards & Reporting (`/api/dashboard`, `/api/reports`)
+| Method | Endpoint | Allowed Roles | Request Payload / Params | Response | Description |
+|---|---|---|---|---|---|
+| `GET` | `/api/dashboard` | Authenticated | None | Role-tailored metrics | Admin (revenue, counts, enrollments); Instructor (grading queue, assigned); Student (progress, attendance) |
+| `GET` | `/api/reports/{type}` | `admin`, `instructor` | Query: `format: "csv" \| "xlsx" \| "pdf"`, `course_id?`, `batch_id?` | Binary file stream | Multi-format data export (`students`, `enrollments`, `payments`, `attendance`, `course-progress`) |
+
+### Module 15: System Health (`/api/health`)
+| Method | Endpoint | Allowed Roles | Request Payload / Params | Response | Description |
+|---|---|---|---|---|---|
+| `GET` | `/api/health` | Public | None | `{"status": "ok", "app": "...", "version": "..."}` | System health check |
